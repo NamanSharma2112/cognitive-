@@ -1,28 +1,57 @@
 import React, { useState } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity, View, ScrollView } from 'react-native';
+import {
+  StyleSheet, TextInput, TouchableOpacity, View,
+  ScrollView, ActivityIndicator,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useAuth } from '@/src/context/AuthContext';
+
+const SEX_OPTIONS = ['Male', 'Female', 'Other', 'Prefer not to say'] as const;
 
 export default function OnboardingScreen() {
   const [age, setAge] = useState('');
   const [sex, setSex] = useState('');
   const [medicalCondition, setMedicalCondition] = useState('');
   const [lifestyle, setLifestyle] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const router = useRouter();
-  const textColor = useThemeColor({}, 'text');
-  const borderColor = useThemeColor({ light: '#ccc', dark: '#444' }, 'text');
+  const { saveProfile } = useAuth();
 
-  const handleComplete = () => {
-    if (age && sex) {
-      // In a real app, save this to your database/backend
-      console.log('Saving profile data:', { age, sex, medicalCondition, lifestyle });
+  const textColor = useThemeColor({}, 'text');
+  const borderColor = useThemeColor({ light: '#ccc', dark: '#555' }, 'text');
+  const cardBg = useThemeColor({ light: '#f9f9f9', dark: '#1a1a1a' }, 'background');
+
+  const handleComplete = async () => {
+    if (!age || !sex) {
+      setError('Please select your Age and Sex to continue.');
+      return;
+    }
+    const ageNum = parseInt(age, 10);
+    if (isNaN(ageNum) || ageNum < 1 || ageNum > 130) {
+      setError('Please enter a valid age.');
+      return;
+    }
+
+    setError('');
+    setIsLoading(true);
+    try {
+      await saveProfile({
+        age: ageNum,
+        sex,
+        medicalConditions: medicalCondition.trim() || undefined,
+        lifestyle: lifestyle.trim() || undefined,
+      });
       router.replace('/(tabs)');
-    } else {
-      alert('Please fill in at least Age and Sex');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not save profile. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -30,56 +59,98 @@ export default function OnboardingScreen() {
     <ThemedView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <ThemedText type="title">Set Up Your Profile</ThemedText>
-          <ThemedText type="subtitle" style={styles.subtitle}>
-            This helps us tailor the cognitive exercises to your needs.
+          <ThemedText style={styles.titleText}>Personal Details</ThemedText>
+          <ThemedText style={styles.subtitleText}>
+            Help us customize your experience by answering a few simple questions.
           </ThemedText>
         </View>
 
         <View style={styles.form}>
-          <ThemedText style={styles.label}>Age</ThemedText>
-          <TextInput
-            style={[styles.input, { color: textColor, borderColor: borderColor }]}
-            placeholder="Enter your age"
-            placeholderTextColor="#888"
-            value={age}
-            onChangeText={setAge}
-            keyboardType="numeric"
-          />
+          {/* Age Section */}
+          <View style={[styles.section, { backgroundColor: cardBg }]}>
+            <ThemedText style={styles.largeLabel}>How old are you?</ThemedText>
+            <TextInput
+              style={[styles.hugeInput, { color: textColor, borderColor }]}
+              placeholder="e.g. 75"
+              placeholderTextColor="#888"
+              value={age}
+              onChangeText={setAge}
+              keyboardType="numeric"
+              maxLength={3}
+              editable={!isLoading}
+            />
+          </View>
 
-          <ThemedText style={styles.label}>Sex</ThemedText>
-          <TextInput
-            style={[styles.input, { color: textColor, borderColor: borderColor }]}
-            placeholder="e.g. Male, Female, Other"
-            placeholderTextColor="#888"
-            value={sex}
-            onChangeText={setSex}
-          />
+          {/* Sex Section */}
+          <View style={[styles.section, { backgroundColor: cardBg }]}>
+            <ThemedText style={styles.largeLabel}>Sex</ThemedText>
+            <View style={styles.optionsContainer}>
+              {SEX_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.optionButton,
+                    { borderColor },
+                    sex === option && styles.optionButtonSelected,
+                  ]}
+                  onPress={() => setSex(option)}
+                  disabled={isLoading}
+                >
+                  <ThemedText style={[styles.optionText, sex === option && styles.optionTextSelected]}>
+                    {option}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
 
-          <ThemedText style={styles.label}>Medical Conditions (if any)</ThemedText>
-          <TextInput
-            style={[styles.input, styles.textArea, { color: textColor, borderColor: borderColor }]}
-            placeholder="e.g. Diabetes, Heart disease, etc."
-            placeholderTextColor="#888"
-            value={medicalCondition}
-            onChangeText={setMedicalCondition}
-            multiline
-            numberOfLines={3}
-          />
+          {/* Medical Section */}
+          <View style={[styles.section, { backgroundColor: cardBg }]}>
+            <ThemedText style={styles.largeLabel}>Any Medical Conditions?</ThemedText>
+            <ThemedText style={styles.smallNote}>Type "None" if you don't have any.</ThemedText>
+            <TextInput
+              style={[styles.textArea, { color: textColor, borderColor }]}
+              placeholder="e.g. Memory loss, Diabetes, Heart issues"
+              placeholderTextColor="#888"
+              value={medicalCondition}
+              onChangeText={setMedicalCondition}
+              multiline
+              numberOfLines={3}
+              editable={!isLoading}
+            />
+          </View>
 
-          <ThemedText style={styles.label}>Lifestyle / Activities</ThemedText>
-          <TextInput
-            style={[styles.input, styles.textArea, { color: textColor, borderColor: borderColor }]}
-            placeholder="e.g. Active, Sedentary, Hobbies"
-            placeholderTextColor="#888"
-            value={lifestyle}
-            onChangeText={setLifestyle}
-            multiline
-            numberOfLines={3}
-          />
+          {/* Lifestyle Section */}
+          <View style={[styles.section, { backgroundColor: cardBg }]}>
+            <ThemedText style={styles.largeLabel}>Daily Activities</ThemedText>
+            <TextInput
+              style={[styles.textArea, { color: textColor, borderColor }]}
+              placeholder="e.g. Walking, Reading, Gardening"
+              placeholderTextColor="#888"
+              value={lifestyle}
+              onChangeText={setLifestyle}
+              multiline
+              numberOfLines={3}
+              editable={!isLoading}
+            />
+          </View>
 
-          <TouchableOpacity style={styles.button} onPress={handleComplete}>
-            <ThemedText style={styles.buttonText}>Start Training</ThemedText>
+          {error !== '' && (
+            <View style={styles.errorBox}>
+              <ThemedText style={styles.errorText}>{error}</ThemedText>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[styles.bigButton, isLoading && styles.bigButtonDisabled]}
+            onPress={handleComplete}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#fff" size="large" />
+            ) : (
+              <ThemedText style={styles.bigButtonText}>SAVE AND START</ThemedText>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -88,53 +159,70 @@ export default function OnboardingScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
+  container: { flex: 1 },
+  scrollContent: { padding: 24, paddingTop: 60, paddingBottom: 60 },
+  header: { marginBottom: 40 },
+  titleText: { fontSize: 36, fontWeight: '800', lineHeight: 44 },
+  subtitleText: { fontSize: 20, marginTop: 12, lineHeight: 28, opacity: 0.8 },
+  form: { gap: 25 },
+  section: {
     padding: 20,
-    paddingTop: 60,
-  },
-  header: {
-    marginBottom: 30,
-    alignItems: 'center',
-  },
-  subtitle: {
-    marginTop: 10,
-    textAlign: 'center',
-    opacity: 0.7,
-  },
-  form: {
-    gap: 15,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: -5,
-  },
-  input: {
-    height: 50,
+    borderRadius: 16,
+    gap: 12,
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    fontSize: 16,
+    borderColor: 'rgba(0,0,0,0.05)',
+  },
+  largeLabel: { fontSize: 22, fontWeight: '700', marginBottom: 4 },
+  smallNote: { fontSize: 16, opacity: 0.6, marginTop: -8, marginBottom: 4 },
+  hugeInput: {
+    height: 70,
+    borderWidth: 2,
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    fontSize: 28,
+    fontWeight: '600',
   },
   textArea: {
-    height: 80,
-    paddingTop: 10,
+    minHeight: 120,
+    borderWidth: 2,
+    borderRadius: 12,
+    padding: 15,
+    fontSize: 20,
     textAlignVertical: 'top',
   },
-  button: {
+  optionsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  optionButton: {
+    paddingVertical: 15,
+    paddingHorizontal: 22,
+    borderWidth: 2,
+    borderRadius: 30,
+    minWidth: 90,
+    alignItems: 'center',
+  },
+  optionButtonSelected: { backgroundColor: '#0a7ea4', borderColor: '#0a7ea4' },
+  optionText: { fontSize: 18, fontWeight: '600' },
+  optionTextSelected: { color: '#fff' },
+  errorBox: {
+    backgroundColor: '#fff0f0',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#FF6B6B',
+  },
+  errorText: { color: '#c0392b', fontSize: 18, fontWeight: '600', textAlign: 'center' },
+  bigButton: {
     backgroundColor: '#0a7ea4',
-    height: 50,
-    borderRadius: 8,
+    height: 80,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 8,
   },
-  buttonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
+  bigButtonDisabled: { opacity: 0.7 },
+  bigButtonText: { color: '#fff', fontSize: 24, fontWeight: '800', letterSpacing: 1 },
 });
